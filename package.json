@@ -1,0 +1,15 @@
+{
+  "name": "hearsay-monorepo",
+  "private": true,
+  "scripts": {
+    "dev": "zellij --layout zellij-layout.kdl",
+    "build": "turbo build",
+    "dev:web": "pnpm --filter @hearsay/web dev",
+    "dev:api": "pnpm --filter @hearsay/api dev",
+    "dev:convex": "pnpm --filter @hearsay/convex dev"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.4"
+  },
+  "packageManager": "pnpm@10.7.0"
+}

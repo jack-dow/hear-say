@@ -1,0 +1,7 @@
+{
+  "name": "@hearsay/api",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "portless hearsay-api sh -c 'uv run uvicorn src.main:app --reload --port ${PORT:-8000}'"
+  }
+}
