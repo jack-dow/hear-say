@@ -1,0 +1,152 @@
+{
+	"$schema": "./node_modules/oxlint/configuration_schema.json",
+	"plugins": ["import", "react"],
+	"categories": {
+		"correctness": "error",
+		"suspicious": "warn"
+	},
+	"env": {
+		"builtin": true
+	},
+	"ignorePatterns": [
+		"**/.astro/",
+		"**/.idea/",
+		"**/node_modules",
+		"**/.pnp",
+		"**/.pnp.js",
+		"**/coverage",
+		"**/.wrangler",
+		"**/.*.vars",
+		"**/.expo/",
+		"**/dist/",
+		"**/expo-env.d.ts",
+		"apps/expo/.gitignore",
+		"**/build",
+		"**/.DS_Store",
+		"**/*.pem",
+		"**/npm-debug.log*",
+		"**/yarn-debug.log*",
+		"**/yarn-error.log*",
+		"**/.pnpm-debug.log*",
+		"**/.env",
+		"**/.env*.local",
+		"**/*.tsbuildinfo",
+		"**/.turbo",
+		"**/seed",
+		"**/*.cookie",
+		"**/.cache",
+		"**/.react-router/",
+		"**/out",
+		"**/.sst",
+		"**/.cache/**",
+		"**/node_modules/**",
+		"**/build/**",
+		"**/public/build/**",
+		"**/dist/**"
+	],
+	"rules": {
+		"no-unexpected-multiline": "error",
+		"no-warning-comments": [
+			"error",
+			{
+				"terms": ["FIXME"],
+				"location": "anywhere"
+			}
+		],
+		"import/no-duplicates": ["warn"],
+		"react-hooks/rules-of-hooks": "error",
+		"react-hooks/exhaustive-deps": "warn"
+	},
+	"overrides": [
+		{
+			"files": ["**/*.js?(x)"],
+			"rules": {
+				"no-unused-vars": [
+					"warn",
+					{
+						"args": "after-used",
+						"argsIgnorePattern": "^_",
+						"ignoreRestSiblings": true,
+						"varsIgnorePattern": "^ignored"
+					}
+				]
+			}
+		},
+		{
+			"files": ["**/*.ts?(x)"],
+			"rules": {
+				"import/consistent-type-specifier-style": ["warn", "prefer-top-level"],
+				"@typescript-eslint/consistent-type-imports": [
+					"warn",
+					{
+						"prefer": "type-imports",
+						"disallowTypeAnnotations": true,
+						"fixStyle": "inline-type-imports"
+					}
+				],
+				"@typescript-eslint/no-misused-promises": [
+					"error",
+					{
+						"checksVoidReturn": false
+					}
+				],
+				"@typescript-eslint/no-floating-promises": "error",
+				"@typescript-eslint/no-explicit-any": "error",
+				"@typescript-eslint/no-unsafe-argument": "warn",
+				"@typescript-eslint/no-unsafe-call": "warn",
+				"@typescript-eslint/no-unsafe-member-access": "warn",
+				"@typescript-eslint/no-unsafe-return": "warn",
+				"@typescript-eslint/no-unsafe-assignment": "warn",
+				"@typescript-eslint/array-type": [
+					"error",
+					{
+						"default": "generic"
+					}
+				],
+				"@typescript-eslint/consistent-type-definitions": ["error", "type"],
+				"no-unused-vars": [
+					"warn",
+					{
+						"args": "after-used",
+						"argsIgnorePattern": "^_",
+						"ignoreRestSiblings": true,
+						"varsIgnorePattern": "^ignored"
+					}
+				],
+				"prefer-const": "error",
+				"no-console": ["warn", { "allow": ["warn", "error"] }],
+				"eqeqeq": ["error", "always", { "null": "ignore" }],
+				"no-implicit-coercion": [
+					"warn",
+					{
+						"boolean": true,
+						"number": true,
+						"string": true
+					}
+				],
+				"@typescript-eslint/naming-convention": [
+					"warn",
+					{
+						"selector": "typeLike",
+						"format": ["PascalCase"]
+					},
+					{
+						"selector": "variable",
+						"types": ["function"],
+						"format": ["camelCase", "PascalCase"]
+					}
+				]
+			},
+			"plugins": ["typescript"]
+		},
+		{
+			"files": ["**/*.ts", "**/*.tsx"],
+			"rules": {
+				"react/react-in-jsx-scope": "off"
+			},
+			"globals": {
+				"React": "writable"
+			}
+		}
+	]
+}

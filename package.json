@@ -4,11 +4,16 @@
   "scripts": {
     "dev": "zellij --layout zellij-layout.kdl",
     "build": "turbo build",
+    "typecheck": "turbo typecheck",
+    "lint": "oxlint apps/web/src packages/convex/convex",
+    "format": "oxfmt apps/web/src packages/convex/convex",
     "dev:web": "pnpm --filter @hearsay/web dev",
     "dev:api": "pnpm --filter @hearsay/api dev",
     "dev:convex": "pnpm --filter @hearsay/convex dev"
   },
   "devDependencies": {
+    "oxfmt": "latest",
+    "oxlint": "latest",
     "turbo": "^2.5.4"
   },
   "packageManager": "pnpm@10.7.0"

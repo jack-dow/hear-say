@@ -7,30 +7,64 @@ from src.env import env
 logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = """\
-You are a text cleaner for a text-to-speech reader. Clean the provided sentences for natural audio playback.
+You are a text cleanup processor preparing OCR-extracted PDF content for text-to-speech (TTS) playback.
+Your ONLY job is to REMOVE non-essential content that would disrupt a natural listening experience. You must NOT rewrite, paraphrase, summarise, or alter the remaining text in any way. The output must be a verbatim subset of the input.
+REMOVE the following:
 
-Rules:
-- Remove inline citations: [1], [1,2], (Author, 2020), (Author et al., 2020), ibid., op. cit.
-- Fix line-break hyphenation: "stu-dying" → "studying", "im-portant" → "important"
-- Fix common OCR artifacts: ligatures, garbled characters, stray punctuation mid-word
-- Do NOT rewrite, summarize, or change the meaning of any sentence
-- Do NOT add or remove sentences — return exactly the same number of items
+Page numbers (e.g. "Page 12", "- 3 -", standalone numbers that are clearly pagination)
+Headers and footers that repeat across pages (e.g. chapter titles, document titles, author names, dates appearing as running heads)
+Footnote/endnote reference markers (superscript numbers, asterisks, daggers like ¹ ² * † within body text)
+Footnote/endnote bodies (the actual footnote text, typically at the bottom of a page or end of a section, beginning with a number or symbol)
+Inline citations (e.g. "(Smith, 2020)", "(ibid.)", "[1]", "[12, 15-17]", "(see Figure 3)")
+Reference lists / bibliographies (sections listing sources, typically at the end)
+Figure/table captions and labels (e.g. "Figure 2.1:", "Table 4:", "Source: ...")
+"Table of contents" entries and page reference lists
+OCR artifacts and garbled text (random character sequences, broken encoding)
+Watermarks or stamps (e.g. "DRAFT", "CONFIDENTIAL", "Downloaded from...")
+DOIs, URLs, and ISBNs
+Copyright notices and licensing boilerplate
+Line numbers (if present in margins)
+
+PRESERVE exactly as-is:
+
+ALL body text, paragraphs, and prose content
+All headings and subheadings (these provide structure for the listener)
+Block quotes and excerpts (these are part of the content)
+Lists (bulleted or numbered) that are part of the main content
+Any content where you are unsure whether it is essential — when in doubt, KEEP IT
+
+RULES:
+
+Output ONLY the cleaned text. No explanations, no metadata, no commentary.
+Do NOT add any text that was not in the original.
+Do NOT rephrase, reword, or restructure any sentence.
+Do NOT merge or split paragraphs.
+Maintain the original paragraph spacing and logical flow.
+If removing a citation leaves awkward punctuation (e.g. "the study found ,"), clean up only the immediate punctuation — nothing else.
+If an entire page consists only of removable content (e.g. a references page), omit it entirely.
 
 Return ONLY a JSON array of cleaned strings with no explanation."""
 
 
-async def _clean_sentences(sentences: list[dict]) -> list[dict]:
-    """Clean a list of sentence dicts via Claude. Falls back per-sentence on parse errors."""
-    if not sentences:
-        return sentences
+def _apply_cleaned(sentences: list[dict], cleaned_texts: list[str]) -> list[dict]:
+    """Merge cleaned texts back onto sentence dicts as cleanedText (text stays as original OCR)."""
+    return [
+        {
+            **s,
+            **({"cleanedText": cleaned_texts[i]} if i < len(cleaned_texts) and cleaned_texts[i] != s["text"] else {}),
+        }
+        for i, s in enumerate(sentences)
+    ]
 
+
+async def _clean_with_anthropic(sentences: list[dict]) -> list[dict]:
     import anthropic
 
     client = anthropic.AsyncAnthropic(api_key=env.anthropic_api_key)
     raw_texts = [s["text"] for s in sentences]
 
     message = await client.messages.create(
-        model="claude-haiku-4-5-20251001",
+        model=env.llm_model,
         max_tokens=8192,
         system=_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": json.dumps(raw_texts)}],
@@ -39,19 +73,37 @@ async def _clean_sentences(sentences: list[dict]) -> list[dict]:
     try:
         cleaned_texts: list[str] = json.loads(message.content[0].text)
     except Exception:
-        logger.warning("LLM cleaning: failed to parse Claude response as JSON — returning original sentences")
+        logger.warning("LLM cleaning (anthropic): failed to parse response as JSON — returning original sentences")
         return sentences
 
-    # Apply index-by-index; fall back per-sentence on count mismatch.
-    # Set rawText to original only when text actually changed.
-    return [
-        {
-            **s,
-            "text": cleaned_texts[i] if i < len(cleaned_texts) else s["text"],
-            **({"rawText": s["text"]} if i < len(cleaned_texts) and cleaned_texts[i] != s["text"] else {}),
-        }
-        for i, s in enumerate(sentences)
-    ]
+    return _apply_cleaned(sentences, cleaned_texts)
+
+
+async def _clean_with_gemini(sentences: list[dict]) -> list[dict]:
+    import google.generativeai as genai
+
+    genai.configure(api_key=env.gemini_api_key)
+    model = genai.GenerativeModel(env.llm_model, system_instruction=_SYSTEM_PROMPT)
+    raw_texts = [s["text"] for s in sentences]
+
+    response = await asyncio.to_thread(model.generate_content, json.dumps(raw_texts))
+
+    try:
+        cleaned_texts: list[str] = json.loads(response.text)
+    except Exception:
+        logger.warning("LLM cleaning (gemini): failed to parse response as JSON — returning original sentences")
+        return sentences
+
+    return _apply_cleaned(sentences, cleaned_texts)
+
+
+async def _clean_sentences(sentences: list[dict]) -> list[dict]:
+    """Route to the configured LLM provider."""
+    if not sentences:
+        return sentences
+    if env.llm_provider == "gemini":
+        return await _clean_with_gemini(sentences)
+    return await _clean_with_anthropic(sentences)
 
 
 async def clean_pages(pages: list[dict], chunk_size: int = 40) -> tuple[list[dict], bool]:
@@ -62,10 +114,11 @@ async def clean_pages(pages: list[dict], chunk_size: int = 40) -> tuple[list[dic
     rebuilds the page structure in the original order.
 
     Returns (cleaned_pages, llm_cleaned) where llm_cleaned=True only if ≥1 sentence changed.
-    No-op if ANTHROPIC_API_KEY is unset.
+    No-op if the active provider's API key is unset.
     """
-    if not env.anthropic_api_key:
-        logger.warning("LLM cleaning skipped: ANTHROPIC_API_KEY is not set")
+    active_key = env.anthropic_api_key if env.llm_provider == "anthropic" else env.gemini_api_key
+    if not active_key:
+        logger.warning("LLM cleaning skipped: %s_API_KEY is not set", env.llm_provider.upper())
         return pages, False
 
     # Flatten all sentences with their source page index
@@ -102,8 +155,10 @@ async def clean_pages(pages: list[dict], chunk_size: int = 40) -> tuple[list[dic
         for pi, page in enumerate(pages)
     ]
 
-    orig_texts = [s["text"] for _, s in flat]
-    cleaned_texts = [s["text"] for pi in range(len(pages)) for s in page_sentences[pi]]
-    any_changed = any(c != o for c, o in zip(cleaned_texts, orig_texts))
+    any_changed = any(
+        "cleanedText" in s
+        for pi in range(len(pages))
+        for s in page_sentences[pi]
+    )
 
     return cleaned_pages, any_changed

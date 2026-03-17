@@ -20,10 +20,13 @@ _startup_logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     MODELS_DIR.mkdir(exist_ok=True)
-    if env.anthropic_api_key:
-        _startup_logger.info("LLM cleaning enabled (ANTHROPIC_API_KEY set)")
+    provider = env.llm_provider
+    active_key = env.anthropic_api_key if provider == "anthropic" else env.gemini_api_key
+    if active_key:
+        _startup_logger.info("LLM cleaning enabled — provider=%s model=%s", provider, env.llm_model)
     else:
-        _startup_logger.warning("LLM cleaning DISABLED — ANTHROPIC_API_KEY not set")
+        key_name = "ANTHROPIC_API_KEY" if provider == "anthropic" else "GEMINI_API_KEY"
+        _startup_logger.warning("LLM cleaning DISABLED — %s not set (LLM_PROVIDER=%s)", key_name, provider)
     yield
 
 
